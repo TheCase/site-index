@@ -29,6 +29,7 @@ groups:
       - build
       - minor
       - major
+      - quality
       - test
       - push
       - deploy
@@ -45,10 +46,24 @@ jobs:
       - { get: version, trigger: false, params: {bump: major} }
       - { put: version} #                 params: {file: version/number} }
 
-  - name: build
-    serial: true
+  - name: quality
     plan:
-      - { get: code, trigger: true }
+      - get: code
+        trigger: true
+      - put: sonar
+        params:
+          project_path: code
+        on_failure:
+          put: notify
+          params:
+            text: "quality failed *$BUILD_PIPELINE_NAME* \
+                  $ATC_EXTERNAL_URL/builds/$BUILD_ID"
+
+  - name: build
+    plan:
+      - get: code
+        passed: [quality]
+        trigger: true
       - put: version
         params:
           bump: patch
@@ -145,6 +160,12 @@ resource_types:
       repository: aretelabs/nomad-resource
       tag: latest
 
+  - name: sonar-runner
+    type: docker-image
+    source:
+      repository: cathive/concourse-sonarqube-resource
+      tag: 0.0.18 
+
   - name: slack-notification
     type: docker-image
     source:
@@ -175,6 +196,14 @@ resources:
     source:
       url: (( grab meta.nomad.url ))
       name: (( grab meta.name ))
+
+  - name: sonar
+    type: sonar-runner
+    source: 
+      host_url: http://sonarqube.service/
+      login: (( grab meta.sonarqube.token ))
+      project_key: com.tec.(( grab meta.name ))
+      branch: master
 
   - name: version
     type: concourse-git-semver-tag

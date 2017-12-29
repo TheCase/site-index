@@ -17,4 +17,6 @@ meta:
     url: http://nomad.service.consul:4646
   slack:
     webhook: (( vault "secret/concourse:slack_webhook" ))
+  sonarqube:
+    token: (( vault "secret/sonarqube:token" ))
 
