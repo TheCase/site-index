@@ -1,0 +1,16 @@
+body {
+	color: #ffffff;
+	background-color: #605454;
+	font-family: "Lucida Grande", Lucida, Verdana, sans-serif;
+}
+a {
+	color: #c8c6c6;
+	text-decoration: none;
+}
+ul {
+	text-align: left;
+  list-style-type: none;
+}
+li {
+	margin-bottom: 12px;
+}
