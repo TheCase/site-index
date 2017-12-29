@@ -26,66 +26,138 @@ meta:
 groups:
   - name: (( grab meta.name ))
     jobs:
-      - build
-      - minor
-      - major
-      - quality
-      - test
+      - bump_minor
+      - bump_major
+      - quality-develop
+      - quality-master
+      - test-develop
+      - test-master
+      - build-develop
+      - build-master
       - push
       - deploy
 
 jobs:
   # manually triggered version bumps
-  - name: minor
+  - name: bump_minor
     plan:
-      - { get: version, trigger: false, params: {bump: minor} }
-      - { put: version} #                 params: {file: version/number} }
+      - { get: version, trigger: false }
+      - { put: version, params: {bump: minor} }
 
-  - name: major
+  - name: bump_major
     plan:
-      - { get: version, trigger: false, params: {bump: major} }
-      - { put: version} #                 params: {file: version/number} }
+      - { get: version, trigger: false }
+      - { put: version, params: {bump: major} }
 
-  - name: quality
+  - name: quality-develop
     plan:
-      - get: code
+      - get: develop
         trigger: true
       - put: sonar
         params:
-          project_path: code
+          project_path: develop
         on_failure:
           put: notify
           params:
-            text: "quality failed *$BUILD_PIPELINE_NAME* \
+            text: "quality-develop failed *$BUILD_PIPELINE_NAME* \
                   $ATC_EXTERNAL_URL/builds/$BUILD_ID"
 
-  - name: build
+  - name: quality-master
     plan:
-      - get: code
-        passed: [quality]
+      - get: master
         trigger: true
-      - put: version
+      - put: sonar
         params:
-          bump: patch
+          project_path: master
+        on_failure:
+          put: notify
+          params:
+            text: "quality-master failed *$BUILD_PIPELINE_NAME* \
+                  $ATC_EXTERNAL_URL/builds/$BUILD_ID"
+
+  - name: build-develop
+    plan:
+      - get: develop
+        passed: [quality-develop]
+        trigger: true
+#     - put: version
+#        params:
+#          bump: pre
       - put: edge 
         params:  
-          build: code
+          build: develop
           tag: version/number                                 
         on_failure:
           put: notify
           params:
-            text: "build failed *$BUILD_PIPELINE_NAME* \
+            text: "build-develop failed *$BUILD_PIPELINE_NAME* \
                   $ATC_EXTERNAL_URL/builds/$BUILD_ID"
       - put: notify
         params:
-          text: "built *$BUILD_PIPELINE_NAME* \
+          text: "built edge *$BUILD_PIPELINE_NAME* \
                 $ATC_EXTERNAL_URL/builds/$BUILD_ID"
 
-  - name: test
+  - name: build-master
+    plan:
+      - get: master
+        passed: [quality-master]
+        trigger: true
+      - put: edge 
+        params:  
+          build: master
+          tag: version/number                                 
+        on_failure:
+          put: notify
+          params:
+            text: "build-master failed *$BUILD_PIPELINE_NAME* \
+                  $ATC_EXTERNAL_URL/builds/$BUILD_ID"
+      - put: notify
+        params:
+          text: "built master *$BUILD_PIPELINE_NAME* \
+                $ATC_EXTERNAL_URL/builds/$BUILD_ID"
+
+  - name: test-develop
     plan:
       - get: edge
         params: { save: true } 
-        passed: [build]
+        passed: [build-develop]
+        trigger: true
+      - task: test
+        privileged: true
+        config:
+          platform: linux
+          image_resource:
+            type: docker-image
+            source: { repository: thecase/dcind }
+          inputs:
+            - name: edge
+          run:
+            path: sh
+            args: 
+             - -exc
+             - |
+               source /docker-lib.sh
+               start_docker
+               docker load -i edge/image 
+               docker tag "$(cat edge/image-id)" test-image:edge 
+               docker run -d --net=host test-image:edge
+               sleep 3
+               curl http://localhost:5000 | grep "site index" && echo "test passed"
+        on_failure:
+          put: notify
+          params:
+            text: "test edge failed *$BUILD_PIPELINE_NAME* \
+                  $ATC_EXTERNAL_URL/builds/$BUILD_ID"
+      - put: notify
+        params:
+          text: "test edge passed *$BUILD_PIPELINE_NAME* \
+                $ATC_EXTERNAL_URL/builds/$BUILD_ID"
+
+  - name: test-master
+    plan:
+      - get: edge
+        params: { save: true } 
+        passed: [build-master]
         trigger: true
       - task: test
         privileged: true
@@ -112,17 +184,21 @@ jobs:
         on_failure:
           put: notify
           params:
-            text: "test failed *$BUILD_PIPELINE_NAME* \
+            text: "test master failed *$BUILD_PIPELINE_NAME* \
                   $ATC_EXTERNAL_URL/builds/$BUILD_ID"
       - put: notify
         params:
-          text: "test passed *$BUILD_PIPELINE_NAME* \
+          text: "test master passed *$BUILD_PIPELINE_NAME* \
                 $ATC_EXTERNAL_URL/builds/$BUILD_ID"
 
   - name: push
     serial: true
     plan:
-      - { get: edge, passed: [test], params: { save: true } , trigger: true }     
+      - { get: edge, passed: [test-master], params: { save: true } , trigger: true }     
+
+      - put: version
+        params:
+          bump: patch
 
       # tags as latest
       - put: latest 
@@ -139,10 +215,10 @@ jobs:
     plan:                                                     
       - aggregate:                                            
         - { get: latest, passed: [push], trigger: true  }
-        - { get: code, trigger: false  }  # for nomad.hcl file               
+        - { get: master, trigger: false  }  # for nomad.hcl file               
       - put: nomad                                            
         params:                                               
-          job_path: code/nomad.hcl                             
+          job_path: master/nomad.hcl                             
       - put: notify                                           
         params:                                               
           text: "deployed *$BUILD_PIPELINE_NAME* \            
@@ -173,12 +249,19 @@ resource_types:
       tag: latest
 
 resources:
-  - name: code
+  - name: develop
     type: git
     source:
       uri: (( grab meta.github.uri ))
       private_key: (( grab meta.github.private_key ))
-      branch: (( grab meta.github.branch ))
+      branch: develop
+
+  - name: master
+    type: git
+    source:
+      uri: (( grab meta.github.uri ))
+      private_key: (( grab meta.github.private_key ))
+      branch: master 
 
   - name: edge
     type: docker-image
@@ -210,8 +293,17 @@ resources:
     source:
       private_key: (( grab meta.github.private_key ))
       uri: (( grab meta.github.uri ))
-      #branch: version
       branch: master
+
+ #  - name: version
+ #    type: semver
+ #    source:
+ #      driver: git
+ #      uri: (( grab meta.github.uri ))
+ #      private_key: (( grab meta.github.private_key ))
+ #      branch: version
+ #      file: version
+ #      initial_version: (( grab meta.initial_version || "0.0.1" ))
 
   - name: notify
     type: slack-notification
