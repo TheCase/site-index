@@ -6,9 +6,9 @@ meta:
   url:      (( param "Please identify the full url of Concourse CI" ))
   pipeline: (( grab meta.name ))
   github:
+    repo:         (( grab meta.name ))
     uri:          (( concat "git@github.com:" meta.github.owner "/" meta.github.repo ))
     owner:        (( param "Please specify the name of the user / organization that owns the Github repository" ))
-    repo:         (( grab meta.name ))
     branch:       master
     private_key:  (( param "Please generate an SSH Deployment Key for this repo and specify it here" ))
     access_token: (( param "Please generate a Personal Access Token and specify it here" ))
@@ -181,17 +181,8 @@ resources:
     source:
       private_key: (( grab meta.github.private_key ))
       uri: (( grab meta.github.uri ))
-      branch: version
-
-      #  - name: version
-      #    type: semver
-      #    source:
-      #      driver: git
-      #      uri: (( grab meta.github.uri ))
-      #      private_key: (( grab meta.github.private_key ))
-      #      branch: version
-      #      file: version
-      #      initial_version: (( grab meta.initial_version || "0.0.1" ))
+      #branch: version
+      branch: master
 
   - name: notify
     type: slack-notification
