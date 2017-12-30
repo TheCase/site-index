@@ -74,11 +74,11 @@ jobs:
         on_failure:
           put: notify
           params:
-            text: "test edge failed *$BUILD_PIPELINE_NAME* \
+            text: "test develop failed *$BUILD_PIPELINE_NAME* \
                   $ATC_EXTERNAL_URL/builds/$BUILD_ID"
       - put: notify
         params:
-          text: "test edge passed *$BUILD_PIPELINE_NAME* \
+          text: "test develop passed *$BUILD_PIPELINE_NAME* \
                 $ATC_EXTERNAL_URL/builds/$BUILD_ID"
 
   - name: quality-master
@@ -111,7 +111,7 @@ jobs:
         on_failure:
           put: notify
           params:
-            text: "build-master failed *$BUILD_PIPELINE_NAME* \
+            text: "build master failed *$BUILD_PIPELINE_NAME* \
                   $ATC_EXTERNAL_URL/builds/$BUILD_ID"
       - put: notify
         params:
@@ -125,7 +125,7 @@ jobs:
         passed: [build-edge]
         trigger: true
       - task: test
-        privileged: true
+        #        privileged: true
         config:
           platform: linux
           image_resource:
@@ -205,7 +205,7 @@ resource_types:
     type: docker-image
     source:
       repository: cathive/concourse-sonarqube-resource
-      tag: 0.0.18 
+      tag: (( grab meta.sonarqube.tag ))
 
   - name: slack-notification
     type: docker-image
