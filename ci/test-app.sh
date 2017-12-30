@@ -1,6 +1,5 @@
 #!/bin/sh
 
-cd develop
 sh provision.sh
 python server.py &
 sleep 5

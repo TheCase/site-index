@@ -5,6 +5,6 @@ image_resource:
     repository: alpine
     tag: latest
 inputs:
-  - name: develop
+  - name: pr
 run:
-  path: cd develop && ./ci/test-app.sh
+  path: cd pr && ./ci/test-app.sh
