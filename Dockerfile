@@ -1,11 +1,7 @@
 FROM alpine:latest
 
-RUN apk add --update python py-pip
-RUN pip install --upgrade pip
-
+COPY installer.sh /
 COPY requirements.txt /
-RUN pip install -r /requirements.txt 
-
 COPY server.py /
 COPY default.cfg /
 RUN mkdir /templates /static
@@ -17,4 +13,7 @@ ENV DOMAIN internal
 
 EXPOSE 5000
 
-CMD python /server.py
+RUN cd / 
+RUN sh installer.sh
+
+CMD python server.py

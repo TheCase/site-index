@@ -29,13 +29,12 @@ groups:
       - bump_minor
       - bump_major
       - quality-develop
+      - test-app
       - quality-master
-      - test-develop
-      - test-master
-      - build-develop
-      - build-master
-      - push
-      - deploy
+      - build-edge
+      - test-edge
+      - push-latest
+      - deploy-latest
 
 jobs:
   # manually triggered version bumps
@@ -62,6 +61,40 @@ jobs:
             text: "quality-develop failed *$BUILD_PIPELINE_NAME* \
                   $ATC_EXTERNAL_URL/builds/$BUILD_ID"
 
+  - name: test-app
+    plan:
+      - get: develop
+        params: { save: true } 
+        passed: [quality-develop]
+        trigger: true
+      - task: test
+        config:
+          platform: linux
+          image_resource:
+            type: docker-image
+            source: { repository: alpine }
+          inputs:
+            - name: develop
+          run:
+            path: sh
+            args: 
+             - -exc
+             - |
+               cd develop
+               sh installer.sh
+               python server.py
+               sleep 3
+               curl http://localhost:5000 | grep "site index" && echo "test passed"
+        on_failure:
+          put: notify
+          params:
+            text: "test edge failed *$BUILD_PIPELINE_NAME* \
+                  $ATC_EXTERNAL_URL/builds/$BUILD_ID"
+      - put: notify
+        params:
+          text: "test edge passed *$BUILD_PIPELINE_NAME* \
+                $ATC_EXTERNAL_URL/builds/$BUILD_ID"
+
   - name: quality-master
     plan:
       - get: master
@@ -75,33 +108,14 @@ jobs:
             text: "quality-master failed *$BUILD_PIPELINE_NAME* \
                   $ATC_EXTERNAL_URL/builds/$BUILD_ID"
 
-  - name: build-develop
-    plan:
-      - get: develop
-        passed: [quality-develop]
-        trigger: true
-#     - put: version
-#        params:
-#          bump: pre
-      - put: edge 
-        params:  
-          build: develop
-          tag: develop/ci/edge                                 
-        on_failure:
-          put: notify
-          params:
-            text: "build-develop failed *$BUILD_PIPELINE_NAME* \
-                  $ATC_EXTERNAL_URL/builds/$BUILD_ID"
-      - put: notify
-        params:
-          text: "built edge *$BUILD_PIPELINE_NAME* \
-                $ATC_EXTERNAL_URL/builds/$BUILD_ID"
-
-  - name: build-master
+  - name: build-edge
     plan:
       - get: master
         passed: [quality-master]
         trigger: true
+      - put: version
+        params:
+          bump: patch
       - put: edge 
         params:  
           build: master
@@ -116,48 +130,11 @@ jobs:
           text: "built master *$BUILD_PIPELINE_NAME* \
                 $ATC_EXTERNAL_URL/builds/$BUILD_ID"
 
-  - name: test-develop
+  - name: test-edge
     plan:
       - get: edge
         params: { save: true } 
-        passed: [build-develop]
-        trigger: true
-      - task: test
-        privileged: true
-        config:
-          platform: linux
-          image_resource:
-            type: docker-image
-            source: { repository: thecase/dcind }
-          inputs:
-            - name: edge
-          run:
-            path: sh
-            args: 
-             - -exc
-             - |
-               source /docker-lib.sh
-               start_docker
-               docker load -i edge/image 
-               docker tag "$(cat edge/image-id)" test-image:edge 
-               docker run -d --net=host test-image:edge
-               sleep 3
-               curl http://localhost:5000 | grep "site index" && echo "test passed"
-        on_failure:
-          put: notify
-          params:
-            text: "test edge failed *$BUILD_PIPELINE_NAME* \
-                  $ATC_EXTERNAL_URL/builds/$BUILD_ID"
-      - put: notify
-        params:
-          text: "test edge passed *$BUILD_PIPELINE_NAME* \
-                $ATC_EXTERNAL_URL/builds/$BUILD_ID"
-
-  - name: test-master
-    plan:
-      - get: edge
-        params: { save: true } 
-        passed: [build-master]
+        passed: [build-edge]
         trigger: true
       - task: test
         privileged: true
@@ -191,16 +168,16 @@ jobs:
           text: "test master passed *$BUILD_PIPELINE_NAME* \
                 $ATC_EXTERNAL_URL/builds/$BUILD_ID"
 
-  - name: push
+  - name: push-latest
     serial: true
     plan:
-      - { get: edge, passed: [test-master], params: { save: true } , trigger: true }     
+      - get: edge
+        passed: [test-edge]
+        params: 
+          save: true
+        trigger: true     
 
-      - put: version
-        params:
-          bump: patch
-
-      # tags as latest
+      # tag image as latest
       - put: latest 
         params: 
           load: edge
@@ -210,11 +187,11 @@ jobs:
           text: "pushed *$BUILD_PIPELINE_NAME* \
                 $ATC_EXTERNAL_URL/builds/$BUILD_ID"
 
-  - name: deploy                                              
+  - name: deploy-latest
     serial: true
     plan:                                                     
       - aggregate:                                            
-        - { get: latest, passed: [push], trigger: true  }
+        - { get: latest, passed: [push-latest], trigger: true  }
         - { get: master, trigger: false  }  # for nomad.hcl file               
       - put: nomad                                            
         params:                                               
