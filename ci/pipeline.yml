@@ -29,7 +29,7 @@ groups:
       - bump_minor
       - bump_major
       - quality-develop
-      - test-app
+      - test-develop
       - quality-pr
       - test-pr
       - quality-master
@@ -64,13 +64,13 @@ jobs:
             text: "quality-develop failed *$BUILD_PIPELINE_NAME* \
                   $ATC_EXTERNAL_URL/builds/$BUILD_ID"
 
-  - name: test-app
+  - name: test-develop
     plan:
       - get: develop
         trigger: true
         passed: [quality-develop]
       - task: test
-        file: develop/ci/test-app.yml
+        file: develop/ci/test-develop.yml
 
         on_failure:
           put: notify
