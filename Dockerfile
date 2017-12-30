@@ -14,6 +14,6 @@ ENV DOMAIN internal
 EXPOSE 5000
 
 RUN cd / 
-RUN sh installer.sh
+RUN sh provision.sh
 
 CMD python server.py
