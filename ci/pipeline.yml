@@ -68,7 +68,7 @@ jobs:
         passed: [quality-develop]
         trigger: true
       - task: test
-        file: develop/ci/app-test.yml
+        file: develop/ci/test-app.yml
 
         on_failure:
           put: notify
