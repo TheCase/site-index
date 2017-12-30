@@ -7,10 +7,4 @@ image_resource:
 inputs:
   - name: develop
 run:
-  #  path: ./ci/test-app.sh
-  path: sh
-  args: 
-    - -exc
-    - | 
-      pwd
-      find .
+  path: ./develop/ci/test-app.sh
