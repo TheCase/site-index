@@ -8,7 +8,8 @@ inputs:
   - name: develop
 run:
   path: sh
-  - -exc 
-  - |
-    cd develop 
-    ./ci/test-app.sh
+  args:
+    - -exc 
+    - |
+      cd develop 
+      ./ci/test-app.sh
