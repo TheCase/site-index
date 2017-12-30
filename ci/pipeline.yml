@@ -80,10 +80,13 @@ jobs:
       - get: develop
         passed: [quality-develop]
         trigger: true
+#     - put: version
+#        params:
+#          bump: pre
       - put: edge 
         params:  
           build: develop
-          tag: develop/ci/edge                             
+          tag: develop/ci/edge                                 
         on_failure:
           put: notify
           params:
