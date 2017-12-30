@@ -83,7 +83,7 @@ jobs:
                cd develop
                ls -al
                sh provision.sh
-               python server.py
+               python server.py &
                sleep 3
                curl http://localhost:5000 | grep "site index" && echo "test passed"
         on_failure:
