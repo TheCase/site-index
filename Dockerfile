@@ -1,6 +1,6 @@
 FROM alpine:latest
 
-COPY installer.sh /
+COPY provision.sh /
 COPY requirements.txt /
 COPY server.py /
 COPY default.cfg /
