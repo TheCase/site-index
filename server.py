@@ -33,9 +33,9 @@ def index():
             services.update({ service: proto })
     return render_template('index.html', services=services, domain=os.getenv('DOMAIN', 'internal'))
 
-@app.route('/health')
+@app.route('/ping')
 def health():
-    return 'OK'
+    return 'pong'
 
 if __name__ == '__main__':
     app.run(debug=True, host=bind_addr, port=bind_port)

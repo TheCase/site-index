@@ -4,4 +4,4 @@ cd develop
 sh provision.sh
 python server.py &
 sleep 5
-curl http://localhost:5000/health | grep "OK" && echo "test passed"
+curl http://localhost:5000/ping | grep "pong" && echo "test passed"
