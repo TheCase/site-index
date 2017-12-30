@@ -1,0 +1,10 @@
+platform: linux
+image_resource:
+  type: docker-image
+  source: 
+    repository: alpine
+    tag: latest
+inputs:
+  - name: pr
+run:
+  path: cd pr && ./ci/test-app.sh

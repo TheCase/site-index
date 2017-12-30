@@ -26,51 +26,157 @@ meta:
 groups:
   - name: (( grab meta.name ))
     jobs:
-      - build
-      - minor
-      - major
-      - test
-      - push
-      - deploy
+      - bump_minor
+      - bump_major
+      - quality-develop
+      - test-app
+      - quality-pr
+      - test-pr
+      - quality-master
+      - build-edge
+      - test-edge
+      - push-latest
+      - deploy-latest
 
 jobs:
   # manually triggered version bumps
-  - name: minor
+  - name: bump_minor
     plan:
-      - { get: version, trigger: false, params: {bump: minor} }
-      - { put: version} #                 params: {file: version/number} }
+      - { get: version, trigger: false }
+      - { put: version, params: {bump: minor} }
 
-  - name: major
+  - name: bump_major
     plan:
-      - { get: version, trigger: false, params: {bump: major} }
-      - { put: version} #                 params: {file: version/number} }
+      - { get: version, trigger: false }
+      - { put: version, params: {bump: major} }
 
-  - name: build
-    serial: true
+  - name: quality-develop
     plan:
-      - { get: code, trigger: true }
+      - get: develop
+        trigger: true
+      - put: sonar
+        params:
+          project_path: develop
+          project_version_file: develop/.git/ref
+        on_failure:
+          put: notify
+          params:
+            text: "quality-develop failed *$BUILD_PIPELINE_NAME* \
+                  $ATC_EXTERNAL_URL/builds/$BUILD_ID"
+
+  - name: test-app
+    plan:
+      - get: develop
+        trigger: true
+        passed: [quality-develop]
+      - task: test
+        file: develop/ci/test-app.yml
+
+        on_failure:
+          put: notify
+          params:
+            text: "test develop failed *$BUILD_PIPELINE_NAME* \
+                  $ATC_EXTERNAL_URL/builds/$BUILD_ID"
+      - put: notify
+        params:
+          text: "test develop passed *$BUILD_PIPELINE_NAME* \
+                $ATC_EXTERNAL_URL/builds/$BUILD_ID"
+
+  - name: quality-pr
+    plan:
+      - get: pr
+        trigger: true
+      - put: sonar
+        params:
+          project_path: pr
+          project_version_file: pr/.git/head_sha
+        on_success:
+          put: pr
+          params:
+            path: pr
+            context: quality
+            status: success
+        on_failure:
+          put: pr
+          params:
+            path: pr
+            context: quality
+            status: failure
+          put: notify
+          params:
+            text: "quality-pr failed *$BUILD_PIPELINE_NAME* \
+                  $ATC_EXTERNAL_URL/builds/$BUILD_ID"
+
+  - name: test-pr
+    plan:
+      - get: pr
+        trigger: true
+        passed: [quality-pr]
+      - task: test
+        file: pr/ci/test-pr.yml
+        on_success:
+          put: pr
+          params:
+            path: pr
+            context: unit-test
+            status: success
+        on_failure:
+          put: pr
+          params:
+            path: pr
+            context: unit-test
+            status: failure
+          put: notify
+          params:
+            text: "test pr failed *$BUILD_PIPELINE_NAME* \
+                  $ATC_EXTERNAL_URL/builds/$BUILD_ID"
+      - put: notify
+        params:
+          text: "test pr passed *$BUILD_PIPELINE_NAME* \
+                $ATC_EXTERNAL_URL/builds/$BUILD_ID"
+
+  - name: quality-master
+    plan:
+      - get: master
+        trigger: true
+      - get: version
+      - put: sonar
+        params:
+          project_path: master
+          project_version_file: version/number
+        on_failure:
+          put: notify
+          params:
+            text: "quality-master failed *$BUILD_PIPELINE_NAME* \
+                  $ATC_EXTERNAL_URL/builds/$BUILD_ID"
+
+  - name: build-edge
+    plan:
+      - get: master
+        passed: [quality-master]
+        trigger: true
       - put: version
         params:
           bump: patch
       - put: edge 
         params:  
-          build: code
+          build: master
           tag: version/number                                 
         on_failure:
           put: notify
           params:
-            text: "build failed *$BUILD_PIPELINE_NAME* \
+            text: "build master failed *$BUILD_PIPELINE_NAME* \
                   $ATC_EXTERNAL_URL/builds/$BUILD_ID"
       - put: notify
         params:
-          text: "built *$BUILD_PIPELINE_NAME* \
+          text: "built master *$BUILD_PIPELINE_NAME* \
                 $ATC_EXTERNAL_URL/builds/$BUILD_ID"
 
-  - name: test
+  - name: test-edge
     plan:
       - get: edge
         params: { save: true } 
-        passed: [build]
+        passed: [build-edge]
         trigger: true
       - task: test
         privileged: true
@@ -92,24 +198,28 @@ jobs:
                docker tag "$(cat edge/image-id)" test-image:edge 
                docker run -d --net=host test-image:edge
                sleep 3
-               curl http://localhost:5000 | grep "site index" && echo "test passed"
+               curl http://localhost:5000/ping | grep "pong" && echo "test passed"
 
         on_failure:
           put: notify
           params:
-            text: "test failed *$BUILD_PIPELINE_NAME* \
+            text: "test master failed *$BUILD_PIPELINE_NAME* \
                   $ATC_EXTERNAL_URL/builds/$BUILD_ID"
       - put: notify
         params:
-          text: "test passed *$BUILD_PIPELINE_NAME* \
+          text: "test master passed *$BUILD_PIPELINE_NAME* \
                 $ATC_EXTERNAL_URL/builds/$BUILD_ID"
 
-  - name: push
+  - name: push-latest
     serial: true
     plan:
-      - { get: edge, passed: [test], params: { save: true } , trigger: true }     
+      - get: edge
+        passed: [test-edge]
+        params: 
+          save: true
+        trigger: true     
 
-      # tags as latest
+      # tag image as latest
       - put: latest 
         params: 
           load: edge
@@ -119,21 +229,26 @@ jobs:
           text: "pushed *$BUILD_PIPELINE_NAME* \
                 $ATC_EXTERNAL_URL/builds/$BUILD_ID"
 
-  - name: deploy                                              
+  - name: deploy-latest
     serial: true
     plan:                                                     
       - aggregate:                                            
-        - { get: latest, passed: [push], trigger: true  }
-        - { get: code, trigger: false  }  # for nomad.hcl file               
+        - { get: latest, passed: [push-latest], trigger: true  }
+        - { get: master, trigger: false  }  # for nomad.hcl file               
       - put: nomad                                            
         params:                                               
-          job_path: code/nomad.hcl                             
+          job_path: master/nomad.hcl                             
       - put: notify                                           
         params:                                               
           text: "deployed *$BUILD_PIPELINE_NAME* \            
                 $ATC_EXTERNAL_URL/builds/$BUILD_ID"           
 
 resource_types:
+  - name: pull-request
+    type: docker-image
+    source:
+      repository: jtarchie/pr
+
   - name: concourse-git-semver-tag
     type: docker-image
     source:
@@ -145,6 +260,12 @@ resource_types:
       repository: aretelabs/nomad-resource
       tag: latest
 
+  - name: sonar-runner
+    type: docker-image
+    source:
+      repository: cathive/concourse-sonarqube-resource
+      tag: (( grab meta.sonarqube.tag ))
+
   - name: slack-notification
     type: docker-image
     source:
@@ -152,12 +273,26 @@ resource_types:
       tag: latest
 
 resources:
-  - name: code
+  - name: develop
     type: git
     source:
       uri: (( grab meta.github.uri ))
       private_key: (( grab meta.github.private_key ))
-      branch: (( grab meta.github.branch ))
+      branch: develop
+
+  - name: master
+    type: git
+    source:
+      uri: (( grab meta.github.uri ))
+      private_key: (( grab meta.github.private_key ))
+      branch: master 
+
+  - name: pr
+    type: pull-request
+    source:
+      access_token: (( grab meta.github.access_token ))
+      private_key: (( grab meta.github.private_key ))
+      repo: (( concat meta.github.owner "/" meta.name ))
 
   - name: edge
     type: docker-image
@@ -176,13 +311,30 @@ resources:
       url: (( grab meta.nomad.url ))
       name: (( grab meta.name ))
 
+  - name: sonar
+    type: sonar-runner
+    source: 
+      host_url: http://sonarqube.service/
+      login: (( grab meta.sonarqube.token ))
+      project_key: com.tec.(( grab meta.name ))
+      branch: master
+
   - name: version
     type: concourse-git-semver-tag
     source:
       private_key: (( grab meta.github.private_key ))
       uri: (( grab meta.github.uri ))
-      #branch: version
       branch: master
+
+ #  - name: version
+ #    type: semver
+ #    source:
+ #      driver: git
+ #      uri: (( grab meta.github.uri ))
+ #      private_key: (( grab meta.github.private_key ))
+ #      branch: version
+ #      file: version
+ #      initial_version: (( grab meta.initial_version || "0.0.1" ))
 
   - name: notify
     type: slack-notification
