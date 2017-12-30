@@ -7,4 +7,8 @@ image_resource:
 inputs:
   - name: pr
 run:
-  path: cd pr && ./ci/test-app.sh
+  path: sh
+  - -exc 
+  - | 
+    cd pr 
+    ./ci/test-app.sh
