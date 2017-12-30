@@ -55,6 +55,7 @@ jobs:
       - put: sonar
         params:
           project_path: develop
+          project_version_file: develop/.git/ref
         on_failure:
           put: notify
           params:
@@ -64,9 +65,9 @@ jobs:
   - name: test-app
     plan:
       - get: develop
-        params: { save: true } 
-        passed: [quality-develop]
+        # params: { save: true } 
         trigger: true
+        passed: [quality-develop]
       - task: test
         file: develop/ci/test-app.yml
 
@@ -84,9 +85,11 @@ jobs:
     plan:
       - get: master
         trigger: true
+      - get: version
       - put: sonar
         params:
           project_path: master
+          project_version_file: version/number
         on_failure:
           put: notify
           params:

@@ -1,8 +1,16 @@
 platform: linux
 image_resource:
   type: docker-image
-  source: { repository: alpine }
+  source: 
+    repository: alpine
+    tag: latest
 inputs:
   - name: develop
 run:
-  path: ./develop/ci/test-app.sh
+  #  path: ./ci/test-app.sh
+  path: sh
+  args: 
+    - -exc
+    - | 
+      pwd
+      find .
