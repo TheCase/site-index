@@ -1,4 +1,4 @@
-#!/bin./sh
+#!/bin/sh
 
 cd develop
 sh provision.sh
