@@ -1,3 +1,3 @@
-apk add -q --update python py-pip curl
+apk add --update python py-pip curl
 pip install --upgrade pip
 pip install -r requirements.txt 
