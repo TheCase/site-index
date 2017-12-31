@@ -56,7 +56,7 @@ jobs:
         params:
           scanner_type: cli
           project_path: develop
-          project_version_file: develop/.git/head_sha
+          project_version_file: develop/.git/ref
         on_failure:
           put: notify
           params:
