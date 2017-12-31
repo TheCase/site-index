@@ -22,7 +22,7 @@ job "site-index" {
     task "site-index" {
       driver = "docker"
       config {
-        image = "registry.311cub.net:5000/site-index:latest"
+        image = "thecase/site-index:latest"
         port_map { http = 5000 }
         logging {
           type = "syslog"
