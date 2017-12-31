@@ -16,6 +16,7 @@ While this is actually a useful tool in my hobby lab, it also serves as my CI/CD
 - Docker
 - Consul
 - Vault
+- Slack
 - Nomad
 
 ## The Concourse Pipeline
