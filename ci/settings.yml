@@ -19,5 +19,6 @@ meta:
     webhook: (( vault "secret/concourse:slack_webhook" ))
   sonarqube:
     token: (( vault "secret/sonarqube:token" ))
-    tag: 0.0.18 
+    #    tag: 0.0.18 
+    tag: latest 
 

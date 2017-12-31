@@ -7,9 +7,5 @@ image_resource:
 inputs:
   - name: develop
 run:
-  path: sh
-  args:
-    - -exc 
-    - |
-      cd develop 
-      ./ci/test-app.sh
+  dir: develop
+  path: ./ci/test-app.sh
