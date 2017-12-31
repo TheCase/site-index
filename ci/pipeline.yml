@@ -1,27 +1,26 @@
 ---
 meta:
-  name:     (( param "Please name your pipeline" ))
-  release:  (( grab meta.name ))
-  target:   (( param "Please identify the name of the target Concourse CI" ))
-  url:      (( param "Please identify the full url of Concourse CI" ))
+  name: (( param "Please name your pipeline" ))
+  release: (( grab meta.name ))
+  target: (( param "Please identify the name of the target Concourse CI" ))
+  url: (( param "Please identify the full url of Concourse CI" ))
   pipeline: (( grab meta.name ))
   github:
-    repo:         (( grab meta.name ))
-    uri:          (( concat "git@github.com:" meta.github.owner "/" meta.github.repo ))
-    owner:        (( param "Please specify the name of the user / organization that owns the Github repository" ))
-    branch:       master
-    private_key:  (( param "Please generate an SSH Deployment Key for this repo and specify it here" ))
+    repo: (( grab meta.name ))
+    uri: (( concat "git@github.com:" meta.github.owner "/" meta.github.repo ))
+    owner: (( param "Please specify the name of the user / organization that owns the Github repository" ))
+    branch: master
+    private_key: (( param "Please generate an SSH Deployment Key for this repo and specify it here" ))
     access_token: (( param "Please generate a Personal Access Token and specify it here" ))
   docker:
-    email:      (( param "Please specify the email address for your Dockerhub account" ))
-    username:   (( param "Please specify the username for your Dockerhub account" ))
-    password:   (( param "Please specify the password for your Dockerhub account" ))
+    email: (( param "Please specify the email address for your Dockerhub account" ))
+    username: (( param "Please specify the username for your Dockerhub account" ))
+    password: (( param "Please specify the password for your Dockerhub account" ))
     repository: (( param "Please specify the name of the image (repo/name) that you are building" ))
-
   nomad:
-    url:  (( param "Please specify the uri for your nomad cluster" ))
+    url: (( param "Please specify the uri for your nomad cluster" ))
   slack:
-    webhook:      (( param "Please specify your Slack Incoming Webhook Integration URL" ))
+    webhook: (( param "Please specify your Slack Incoming Webhook Integration URL" ))
 
 groups:
   - name: (( grab meta.name ))
@@ -32,7 +31,6 @@ groups:
       - test-develop
       - quality-pr
       - test-pr
-      - quality-master
       - build-edge
       - test-edge
       - push-latest
@@ -56,19 +54,41 @@ jobs:
         trigger: true
       - put: sonar
         params:
+          scanner_type: cli
           project_path: develop
-          project_version_file: develop/.git/ref
+          project_version_file: pr/.git/head_sha
         on_failure:
           put: notify
           params:
             text: "quality-develop failed *$BUILD_PIPELINE_NAME* \
                   $ATC_EXTERNAL_URL/builds/$BUILD_ID"
+      - task: get_quality
+        config:
+          platform: linux
+          image_resource:
+            type: docker-image
+            source:
+              repository: node
+              tag: '8.4.0'
+          inputs:
+          - name: sonar
+          run:
+            dir: sonar
+            path: node
+            args:
+            - -e
+            - "const projectStatus = require('./qualitygate_project_status.json'); if (projectStatus.status !== 'OK') { console.error('Quality gate goals missed. :-('); process.exit(1); }"
+        on_failure:
+          put: notify
+          params:
+            text: "quality-pr failed *$BUILD_PIPELINE_NAME* \
+                  $ATC_EXTERNAL_URL/builds/$BUILD_ID"
 
   - name: test-develop
     plan:
       - get: develop
-        trigger: true
         passed: [quality-develop]
+        trigger: true
       - task: test
         file: develop/ci/test-develop.yml
 
@@ -88,8 +108,30 @@ jobs:
         trigger: true
       - put: sonar
         params:
+          scanner_type: cli
           project_path: pr
           project_version_file: pr/.git/head_sha
+        on_failure:
+          put: notify
+          params:
+            text: "scanner-pr failed *$BUILD_PIPELINE_NAME* \
+                  $ATC_EXTERNAL_URL/builds/$BUILD_ID"
+      - task: get_quality
+        config:
+          platform: linux
+          image_resource:
+            type: docker-image
+            source:
+              repository: node
+              tag: '8.4.0'
+          inputs:
+          - name: sonar
+          run:
+            dir: sonar
+            path: node
+            args:
+            - -e
+            - "const projectStatus = require('./qualitygate_project_status.json'); if (projectStatus.status !== 'OK') { console.error('Quality gate goals missed. :-('); process.exit(1); }"
         on_success:
           put: pr
           params:
@@ -135,33 +177,17 @@ jobs:
           text: "test pr passed *$BUILD_PIPELINE_NAME* \
                 $ATC_EXTERNAL_URL/builds/$BUILD_ID"
 
-  - name: quality-master
-    plan:
-      - get: master
-        trigger: true
-      - get: version
-      - put: sonar
-        params:
-          project_path: master
-          project_version_file: version/number
-        on_failure:
-          put: notify
-          params:
-            text: "quality-master failed *$BUILD_PIPELINE_NAME* \
-                  $ATC_EXTERNAL_URL/builds/$BUILD_ID"
-
   - name: build-edge
     plan:
       - get: master
-        passed: [quality-master]
         trigger: true
       - put: version
         params:
           bump: patch
-      - put: edge 
-        params:  
+      - put: edge
+        params:
           build: master
-          tag: version/number                                 
+          tag: version/number
         on_failure:
           put: notify
           params:
@@ -175,7 +201,7 @@ jobs:
   - name: test-edge
     plan:
       - get: edge
-        params: { save: true } 
+        params: { save: true }
         passed: [build-edge]
         trigger: true
       - task: test
@@ -189,13 +215,13 @@ jobs:
             - name: edge
           run:
             path: sh
-            args: 
+            args:
              - -exc
              - |
                source /docker-lib.sh
                start_docker
-               docker load -i edge/image 
-               docker tag "$(cat edge/image-id)" test-image:edge 
+               docker load -i edge/image
+               docker tag "$(cat edge/image-id)" test-image:edge
                docker run -d --net=host test-image:edge
                sleep 3
                curl http://localhost:5000/ping | grep "pong" && echo "test passed"
@@ -215,15 +241,15 @@ jobs:
     plan:
       - get: edge
         passed: [test-edge]
-        params: 
+        params:
           save: true
-        trigger: true     
+        trigger: true
 
       # tag image as latest
-      - put: latest 
-        params: 
+      - put: latest
+        params:
           load: edge
-                                                              
+
       - put: notify
         params:
           text: "pushed *$BUILD_PIPELINE_NAME* \
@@ -231,17 +257,17 @@ jobs:
 
   - name: deploy-latest
     serial: true
-    plan:                                                     
-      - aggregate:                                            
+    plan:
+      - aggregate:
         - { get: latest, passed: [push-latest], trigger: true  }
-        - { get: master, trigger: false  }  # for nomad.hcl file               
-      - put: nomad                                            
-        params:                                               
-          job_path: master/nomad.hcl                             
-      - put: notify                                           
-        params:                                               
-          text: "deployed *$BUILD_PIPELINE_NAME* \            
-                $ATC_EXTERNAL_URL/builds/$BUILD_ID"           
+        - { get: master, trigger: false  }  # for nomad.hcl file
+      - put: nomad
+        params:
+          job_path: master/nomad.hcl
+      - put: notify
+        params:
+          text: "deployed *$BUILD_PIPELINE_NAME* \
+                $ATC_EXTERNAL_URL/builds/$BUILD_ID"
 
 resource_types:
   - name: pull-request
@@ -285,7 +311,7 @@ resources:
     source:
       uri: (( grab meta.github.uri ))
       private_key: (( grab meta.github.private_key ))
-      branch: master 
+      branch: master
 
   - name: pr
     type: pull-request
@@ -313,7 +339,7 @@ resources:
 
   - name: sonar
     type: sonar-runner
-    source: 
+    source:
       host_url: http://sonarqube.service/
       login: (( grab meta.sonarqube.token ))
       project_key: com.tec.(( grab meta.name ))
@@ -340,4 +366,3 @@ resources:
     type: slack-notification
     source:
       url: (( grab meta.slack.webhook ))
-

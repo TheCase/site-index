@@ -19,9 +19,6 @@ config.readfp(open('default.cfg'))
 bind_addr = config.get('attributes', 'bind_addr')
 bind_port = int(config.get('attributes', 'bind_port'))
 
-print "foo"
-bind_addr = '0.0.0.0'
-
 @app.route('/')
 def index():
     """ index page function """
