@@ -22,6 +22,88 @@ meta:
   slack:
     webhook: (( param "Please specify your Slack Incoming Webhook Integration URL" ))
 
+resource_types:
+  - name: pull-request
+    type: docker-image
+    source:
+      repository: jtarchie/pr
+
+  - name: concourse-git-semver-tag
+    type: docker-image
+    source:
+      repository: laurentverbruggen/concourse-git-semver-tag-resource
+
+  - name: nomad
+    type: docker-image
+    source:
+      repository: aretelabs/nomad-resource
+      tag: latest
+
+  - name: sonar-runner
+    type: docker-image
+    source:
+      repository: thecase/concourse-sonarqube-resource
+      tag: (( grab meta.sonarqube.tag ))
+
+  - name: slack-notification
+    type: docker-image
+    source:
+      repository: cfcommunity/slack-notification-resource
+      tag: latest
+
+resources:
+  - name: develop
+    type: git
+    source:
+      uri: (( grab meta.github.uri ))
+      private_key: (( grab meta.github.private_key ))
+      branch: develop
+
+  - name: master
+    type: git
+    source:
+      uri: (( grab meta.github.uri ))
+      private_key: (( grab meta.github.private_key ))
+      branch: master
+
+  - name: pr
+    type: pull-request
+    source:
+      access_token: (( grab meta.github.access_token ))
+      private_key: (( grab meta.github.private_key ))
+      repo: (( concat meta.github.owner "/" meta.name ))
+
+  - name: image
+    type: docker-image
+    source:
+      .: (( inject meta.docker ))
+
+  - name: nomad
+    type: nomad
+    source:
+      url: (( grab meta.nomad.url ))
+      name: (( grab meta.name ))
+
+  - name: sonar
+    type: sonar-runner
+    source:
+      host_url: http://sonarqube.service/
+      login: (( grab meta.sonarqube.token ))
+      project_key: com.tec.(( grab meta.name ))
+      branch: master
+
+  - name: version
+    type: concourse-git-semver-tag
+    source:
+      private_key: (( grab meta.github.private_key ))
+      uri: (( grab meta.github.uri ))
+      branch: master
+
+  - name: notify
+    type: slack-notification
+    source:
+      url: (( grab meta.slack.webhook ))
+
 groups:
   - name: (( grab meta.name ))
     jobs:
@@ -31,13 +113,14 @@ groups:
       - test-develop
       - quality-pr
       - test-pr
-      - build-edge
-      - test-edge
+      - build-image
+      - test-image
       - push-latest
       - deploy-latest
 
 jobs:
   # manually triggered version bumps
+  
   - name: bump_minor
     plan:
       - { get: version, trigger: false }
@@ -135,14 +218,14 @@ jobs:
           text: "test pr passed *$BUILD_PIPELINE_NAME* \
                 $ATC_EXTERNAL_URL/builds/$BUILD_ID"
 
-  - name: build-edge
+  - name: build-image
     plan:
       - get: master
         trigger: true
       - put: version
         params:
-          bump: patch
-      - put: edge
+          pre: rc # bump as pre-relase
+      - put: image
         params:
           build: master
           tag: version/number
@@ -156,11 +239,11 @@ jobs:
           text: "built master *$BUILD_PIPELINE_NAME* \
                 $ATC_EXTERNAL_URL/builds/$BUILD_ID"
 
-  - name: test-edge
+  - name: test-image
     plan:
-      - get: edge
+      - get: image
         params: { save: true }
-        passed: [build-edge]
+        passed: [build-image]
         trigger: true
       - task: test
         privileged: true
@@ -170,7 +253,7 @@ jobs:
             type: docker-image
             source: { repository: thecase/dcind }
           inputs:
-            - name: edge
+            - name: image
           run:
             path: sh
             args:
@@ -178,9 +261,9 @@ jobs:
              - |
                source /docker-lib.sh
                start_docker
-               docker load -i edge/image
-               docker tag "$(cat edge/image-id)" test-image:edge
-               docker run -d --net=host test-image:edge
+               docker load -i image/image
+               docker tag "$(cat image/image-id)" test-image:image
+               docker run -d --net=host test-image:image
                sleep 3
                curl http://localhost:5000/ping | grep "pong" && echo "test passed"
 
@@ -197,16 +280,23 @@ jobs:
   - name: push-latest
     serial: true
     plan:
-      - get: edge
-        passed: [test-edge]
+      - get: image
+        passed: [test-image]
         params:
           save: true
         trigger: true
 
-      # tag image as latest
-      - put: latest
+      # bump to minor
+      - put: version
         params:
-          load: edge
+          bump: patch 
+
+      # tag image as latest
+      - put: image
+        params:
+          load: image
+          tag: version/number
+          tag_as_latest: true
 
       - put: notify
         params:
@@ -217,7 +307,7 @@ jobs:
     serial: true
     plan:
       - aggregate:
-        - { get: latest, passed: [push-latest], trigger: true  }
+        - { get: image, passed: [push-latest], trigger: true  }
         - { get: master, trigger: false  }  # for nomad.hcl file
       - put: nomad
         params:
@@ -227,100 +317,3 @@ jobs:
           text: "deployed *$BUILD_PIPELINE_NAME* \
                 $ATC_EXTERNAL_URL/builds/$BUILD_ID"
 
-resource_types:
-  - name: pull-request
-    type: docker-image
-    source:
-      repository: jtarchie/pr
-
-  - name: concourse-git-semver-tag
-    type: docker-image
-    source:
-      repository: laurentverbruggen/concourse-git-semver-tag-resource
-
-  - name: nomad
-    type: docker-image
-    source:
-      repository: aretelabs/nomad-resource
-      tag: latest
-
-  - name: sonar-runner
-    type: docker-image
-    source:
-      repository: thecase/concourse-sonarqube-resource
-      tag: (( grab meta.sonarqube.tag ))
-
-  - name: slack-notification
-    type: docker-image
-    source:
-      repository: cfcommunity/slack-notification-resource
-      tag: latest
-
-resources:
-  - name: develop
-    type: git
-    source:
-      uri: (( grab meta.github.uri ))
-      private_key: (( grab meta.github.private_key ))
-      branch: develop
-
-  - name: master
-    type: git
-    source:
-      uri: (( grab meta.github.uri ))
-      private_key: (( grab meta.github.private_key ))
-      branch: master
-
-  - name: pr
-    type: pull-request
-    source:
-      access_token: (( grab meta.github.access_token ))
-      private_key: (( grab meta.github.private_key ))
-      repo: (( concat meta.github.owner "/" meta.name ))
-
-  - name: edge
-    type: docker-image
-    source:
-      .: (( inject meta.docker ))
-
-  - name: latest
-    type: docker-image
-    source:
-      .: (( inject meta.docker ))
-      tag: latest
-
-  - name: nomad
-    type: nomad
-    source:
-      url: (( grab meta.nomad.url ))
-      name: (( grab meta.name ))
-
-  - name: sonar
-    type: sonar-runner
-    source:
-      host_url: http://sonarqube.service/
-      login: (( grab meta.sonarqube.token ))
-      project_key: com.tec.(( grab meta.name ))
-      branch: master
-
-  - name: version
-    type: concourse-git-semver-tag
-    source:
-      private_key: (( grab meta.github.private_key ))
-      uri: (( grab meta.github.uri ))
-      branch: master
-
- #  - name: version
- #    type: semver
- #    source:
- #      driver: git
- #      uri: (( grab meta.github.uri ))
- #      private_key: (( grab meta.github.private_key ))
- #      branch: version
- #      file: version
- #      initial_version: (( grab meta.initial_version || "0.0.1" ))
-
-  - name: notify
-    type: slack-notification
-    source:
-      url: (( grab meta.slack.webhook ))
