@@ -60,29 +60,29 @@ jobs:
         on_failure:
           put: notify
           params:
-            text: "scanner-develop failed *$BUILD_PIPELINE_NAME* \
-                  $ATC_EXTERNAL_URL/builds/$BUILD_ID"
-      - task: get_quality
-        config:
-          platform: linux
-          image_resource:
-            type: docker-image
-            source:
-              repository: node
-              tag: '8.4.0'
-          inputs:
-          - name: sonar
-          run:
-            dir: sonar
-            path: node
-            args:
-            - -e
-            - "const projectStatus = require('./qualitygate_project_status.json'); if (projectStatus.status !== 'OK') { console.error('Quality gate goals missed. :-('); process.exit(1); }"
-        on_failure:
-          put: notify
-          params:
             text: "quality-develop failed *$BUILD_PIPELINE_NAME* \
                   $ATC_EXTERNAL_URL/builds/$BUILD_ID"
+                  #- task: get_quality
+                  #        config:
+                  #          platform: linux
+                  #          image_resource:
+                  #            type: docker-image
+                  #            source:
+              #              repository: node
+              #              tag: '8.4.0'
+              #          inputs:
+              #          - name: sonar
+              #          run:
+              #            dir: sonar
+              #            path: node
+              #            args:
+              #            - -e
+              #            - "const projectStatus = require('./qualitygate_project_status.json'); if (projectStatus.status !== 'OK') { console.error('Quality gate goals missed. :-('); process.exit(1); }"
+              #        on_failure:
+              #          put: notify
+              #          params:
+              #            text: "quality-develop failed *$BUILD_PIPELINE_NAME* \
+              #                  $ATC_EXTERNAL_URL/builds/$BUILD_ID"
 
   - name: test-develop
     plan:
@@ -289,7 +289,7 @@ resource_types:
   - name: sonar-runner
     type: docker-image
     source:
-      repository: cathive/concourse-sonarqube-resource
+      repository: thecase/concourse-sonarqube-resource
       tag: (( grab meta.sonarqube.tag ))
 
   - name: slack-notification

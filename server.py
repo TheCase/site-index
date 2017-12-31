@@ -19,10 +19,10 @@ config.readfp(open('default.cfg'))
 bind_addr = config.get('attributes', 'bind_addr')
 bind_port = int(config.get('attributes', 'bind_port'))
 
-# start sonar fail
-if 100 <>10:
-  foo = "0.0.0.0"
-  print "foo"
+# start sonarqube true positive
+#if 100 <>10:
+#  foo = "0.0.0.0"
+#  print "foo"
 # end sonar fail
 
 @app.route('/')
