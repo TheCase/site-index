@@ -56,11 +56,11 @@ jobs:
         params:
           scanner_type: cli
           project_path: develop
-          project_version_file: pr/.git/head_sha
+          project_version_file: develop/.git/head_sha
         on_failure:
           put: notify
           params:
-            text: "quality-develop failed *$BUILD_PIPELINE_NAME* \
+            text: "scanner-develop failed *$BUILD_PIPELINE_NAME* \
                   $ATC_EXTERNAL_URL/builds/$BUILD_ID"
       - task: get_quality
         config:
@@ -81,7 +81,7 @@ jobs:
         on_failure:
           put: notify
           params:
-            text: "quality-pr failed *$BUILD_PIPELINE_NAME* \
+            text: "quality-develop failed *$BUILD_PIPELINE_NAME* \
                   $ATC_EXTERNAL_URL/builds/$BUILD_ID"
 
   - name: test-develop
