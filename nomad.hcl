@@ -51,7 +51,7 @@ job "site-index" {
       }
 
       resources {
-        cpu    = 20 # MHz 
+        cpu    = 100 # MHz 
         memory = 256 # MB 
         network {
           mbits = 10
